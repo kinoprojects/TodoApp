@@ -1,0 +1,80 @@
+ToDoアプリの拡張
+要件
+・プロジェクト、チーム、メンバーの要素を付与する。
+・以下の様な階層構造にする
+　プロジェクト
+　　　→ チーム
+　　　　 → task
+・taskにメンバーの属性を付与する
+
+1.テーブル構成
+    1-1必要なテーブル
+        1.プロジェクトテーブル
+        2.チームテーブル
+        3.メンバーテーブル
+        4.タスクテーブル
+
+    1-2プロジェクトテーブル Projects
+        ・Id ・・・int PK
+        ・Name・・・string notnull
+        ・CreatedAt・・・datetime
+        ・UpdatedAt・・・datetime
+
+    1-3チームテーブル Teams
+        ・Id・・・int PK
+        ・ProjectId・・・int　FK -> Projects.Id
+        ・Name・・・ string notnull
+        ・CreateAt・・・datetime
+        ・UpdatedAt・・・datetime
+
+    1-4メンバーテーブル Members
+        ・Id・・・int PK
+        ・Name・・・ string notnull
+        ・CreateAt・・・datetime
+        ・UpdatedAt・・・datetime
+
+    1-5タスクテーブル TodoItem
+        ・Id・・・int PK
+        ・TeamId・・・string FK -> Teams.Id
+        ・Title・・・string　notnull
+        ・IsDone・・・bool
+        ・CreateAt・・・datetime
+        ・UpdatedAt・・・datetime
+
+    1-6メンバーチーム間の中間テーブル
+        ・Id
+        ・TeamId
+        ・MemberId
+        ・Role
+    
+    1-7メンバータスク間の中間テーブル
+        ・Id
+        ・MemberId
+        ・TodoItemId
+        ・Role
+    
+
+2.APIの設計
+    2-1.Projects
+        - GET     /api/projects
+        - GET     /api/projects/{id}
+        - POST    /api/projects 
+
+    2-2.Teams
+        - GET    /api/teams
+        - GET    /api/teams/{id}
+        - POST   /api/teams 
+
+    2-3.Members
+        - GET    /api/members
+        - GET    /api/members/{id}
+        - POST   /api/members
+
+    2-4.TodoItems
+        - GET    /api/todos
+        - GET    /api/todos/{id}
+        - POST   /api/todos
+        - PUT    /api/todos/{id}
+        - DELETE /api/todos/{id}
+
+    

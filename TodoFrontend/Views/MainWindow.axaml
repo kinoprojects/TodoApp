@@ -1,0 +1,40 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TodoFrontend.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="TodoFrontend.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="TodoFrontend">
+
+    <Design.DataContext>
+        <!-- This only sets the DataContext for the previewer in an IDE,
+             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <StackPanel Margin="20" Spacing="12">
+        <TextBlock Text="タスク一覧" FontSize="24" FontWeight="Bold" />
+
+        <ListBox ItemsSource="{Binding Todos}">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Border Padding="10" Margin="0,4" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="Bold" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="{Binding Status}" FontSize="14"/>
+                                <TextBlock Text="{Binding TeamName}" FontSize="14"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding MemberNames}" FontSize="13"/>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </StackPanel>
+
+</Window>
