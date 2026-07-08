@@ -15,26 +15,72 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <StackPanel Margin="20" Spacing="12">
-        <TextBlock Text="タスク一覧" FontSize="24" FontWeight="Bold" />
+    <Grid Margin="20"
+      RowDefinitions="Auto,Auto,*"
+      RowSpacing="12">
 
-        <ListBox ItemsSource="{Binding Todos}">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <Border Padding="10" Margin="0,4" BorderThickness="1">
-                        <StackPanel>
-                            <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="Bold" />
+    <TextBlock Grid.Row="0"
+               Text="タスク一覧"
+               FontSize="24"
+               FontWeight="Bold" />
 
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="{Binding Status}" FontSize="14"/>
-                                <TextBlock Text="{Binding TeamName}" FontSize="14"/>
-                            </StackPanel>
-                            <TextBlock Text="{Binding MemberNames}" FontSize="13"/>
+    <Border Grid.Row="1"
+            Padding="12"
+            Margin="0,0,0,12"
+            BorderThickness="1"
+            BorderBrush="Gray">
+
+        <StackPanel Spacing="8">
+            <TextBlock Text="Todo追加"
+                       FontSize="18"
+                       FontWeight="Bold" />
+
+            <TextBox Watermark="タイトル"
+                     Text="{Binding NewTodoTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <TextBox Watermark="TeamId"
+                     Text="{Binding NewTodoTeamId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <TextBox Watermark="MemberId"
+                     Text="{Binding NewTodoMemberId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Button Content="追加"
+                    Command="{Binding AddTodoCommand}" />
+        </StackPanel>
+    </Border>
+
+    <ListBox Grid.Row="2"
+             ItemsSource="{Binding Todos}">
+
+        <ListBox.ItemTemplate>
+            <DataTemplate>
+                <Border Padding="10"
+                        Margin="0,4"
+                        BorderThickness="1"
+                        BorderBrush="Gray">
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding Title}"
+                                   FontSize="16"
+                                   FontWeight="Bold" />
+
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="12">
+                            <TextBlock Text="{Binding Status}"
+                                       FontSize="14" />
+
+                            <TextBlock Text="{Binding TeamName}"
+                                       FontSize="14" />
                         </StackPanel>
-                    </Border>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
-    </StackPanel>
+
+                        <TextBlock Text="{Binding MemberNames}"
+                                   FontSize="13" />
+                    </StackPanel>
+                </Border>
+            </DataTemplate>
+        </ListBox.ItemTemplate>
+    </ListBox>
+
+</Grid>
 
 </Window>

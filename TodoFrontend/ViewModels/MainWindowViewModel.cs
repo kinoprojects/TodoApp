@@ -6,6 +6,11 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
 using TodoFrontend.Models;
+using CommunityToolkit.Mvvm.Input;
+using TodoFrontend.Models;
+using System.Collections.Generic;
+using System.Net.Http.Json;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace TodoFrontend.ViewModels;
 
@@ -149,4 +154,78 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    [ObservableProperty]
+    private string newTodoTitle = string.Empty;
+
+    [ObservableProperty]
+    private string newTodoTeamId = string.Empty;
+
+    [ObservableProperty]
+    private string newTodoMemberId = string.Empty;
+
+
+    // CommunityToolkit.Mvvmの機能で、AddTodoCommandを作ってくれて、xaml側でBindingコマンドとして使用できるようになる
+    [RelayCommand]
+    private async Task AddTodoAsync()
+    {
+        Console.WriteLine("AddTodoAsync が呼ばれました");
+
+        if (string.IsNullOrWhiteSpace(newTodoTitle))
+        {
+            Console.WriteLine("タイトルを入力してください。");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(newTodoTitle))
+        {
+            Console.WriteLine("タイトルを入力してください。");
+            return;
+        }
+
+        // NewTodoTeamIdをIntに変換できるかk、できたらteamIdに入れる、無理ならエラー扱いにする。
+        if (!int.TryParse(newTodoTeamId, out var teamId))
+        {
+            Console.WriteLine("TeamIdは数値で入力してください。");
+            return;
+        }
+        
+        var memberIds = new List<int>();
+
+        if(!string.IsNullOrWhiteSpace(newTodoMemberId))
+        {
+            if(!int.TryParse(newTodoMemberId, out var memberId))
+            {
+                Console.WriteLine("MemberIdは数値で入力してください。");
+                return;
+            }
+            memberIds.Add(memberId);
+        }
+
+        var request = new CreateTodoRequest
+        {
+            TeamId = teamId,
+            Title = newTodoTitle,
+            Status = "Todo",
+            MemberIds = memberIds
+        };
+
+        var response = await _httpClient.PostAsJsonAsync(
+            "http://localhost:5128/api/todos",
+            request
+        );
+
+        if(!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"Todo追加に失敗しました: {response.StatusCode}");
+            Console.WriteLine($"StatusCode: {(int)response.StatusCode} {response.StatusCode}");
+            Console.WriteLine($"ErrorBody: {error}");
+            return;
+        }
+        newTodoTitle = string.Empty;
+        newTodoTeamId = string.Empty;
+        newTodoMemberId = string.Empty;
+
+        await LoadTodosAsync();
+    }
 }    

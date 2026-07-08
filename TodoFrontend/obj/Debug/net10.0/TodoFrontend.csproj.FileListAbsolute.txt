@@ -90,3 +90,4 @@
 /Users/youpy/develop/TodoApp/TodoFrontend/obj/Debug/net10.0/TodoFrontend.pdb
 /Users/youpy/develop/TodoApp/TodoFrontend/obj/Debug/net10.0/TodoFrontend.genruntimeconfig.cache
 /Users/youpy/develop/TodoApp/TodoFrontend/obj/Debug/net10.0/ref/TodoFrontend.dll
+/Users/youpy/develop/TodoApp/TodoFrontend/obj/Debug/net10.0/TodoFrontend.sourcelink.json
