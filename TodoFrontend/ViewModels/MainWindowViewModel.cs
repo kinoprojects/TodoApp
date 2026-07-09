@@ -129,6 +129,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 "http://localhost:5128/api/todos"
             );
 
+            allTodos.Clear();
+
             if (todos is null)
             {
                 Todos.Clear();
