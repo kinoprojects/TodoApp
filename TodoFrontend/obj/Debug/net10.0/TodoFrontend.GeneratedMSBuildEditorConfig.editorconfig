@@ -6,7 +6,7 @@ build_property.AvaloniaNameGeneratorFilterByPath = *
 build_property.AvaloniaNameGeneratorFilterByNamespace = *
 build_property.AvaloniaNameGeneratorViewFileNamingStrategy = NamespaceAndClassName
 build_property.AvaloniaNameGeneratorAttachDevTools = true
-build_property.AvaloniaUseCompiledBindingsByDefault = true
+build_property.AvaloniaUseCompiledBindingsByDefault = false
 build_property.AvaloniaMainPackageVersion = 12.0.5
 build_property.AvaloniaPreviewerNetCoreToolPath = /Users/youpy/.nuget/packages/avalonia/12.0.5/buildTransitive//../tools/net8.0/designer/Avalonia.Designer.HostApp.dll
 build_property.MvvmToolkitEnableINotifyPropertyChangingSupport = true
@@ -36,6 +36,12 @@ build_property.EnableCodeStyleSeverity =
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
 [/Users/youpy/develop/TodoApp/TodoFrontend/Views/MainWindow.axaml]
+build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
+
+[/Users/youpy/develop/TodoApp/TodoFrontend/Views/ManagementView.axaml]
+build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
+
+[/Users/youpy/develop/TodoApp/TodoFrontend/Views/TodoListView.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
 [/Users/youpy/develop/TodoApp/TodoFrontend/Assets/avalonia-logo.ico]

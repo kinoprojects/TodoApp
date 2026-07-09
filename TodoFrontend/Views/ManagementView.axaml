@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="TodoFrontend.ManagementView">
+<ScrollViewer>
+        <StackPanel Margin="20" Spacing="16">
+
+            <Button Content="Todo一覧へ戻る"
+                    Command="{Binding ShowTodoListCommand}" />
+
+            <TextBlock Text="管理画面"
+                       FontSize="24"
+                       FontWeight="Bold" />
+
+            <Border Padding="12"
+                    BorderThickness="1"
+                    BorderBrush="Gray">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Project追加"
+                               FontSize="18"
+                               FontWeight="Bold" />
+
+                    <TextBox Watermark="Project名"
+                             Text="{Binding NewProjectName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <Button Content="Project追加"
+                            Command="{Binding AddProjectCommand}" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="12"
+                    BorderThickness="1"
+                    BorderBrush="Gray">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Team追加"
+                               FontSize="18"
+                               FontWeight="Bold" />
+
+                    <TextBox Watermark="Project名"
+                             Text="{Binding NewTeamProjectName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBox Watermark="Team名"
+                             Text="{Binding NewTeamName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <Button Content="Team追加"
+                            Command="{Binding AddTeamCommand}" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="12"
+                    BorderThickness="1"
+                    BorderBrush="Gray">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Member追加"
+                               FontSize="18"
+                               FontWeight="Bold" />
+
+                    <TextBox Watermark="Member名"
+                             Text="{Binding NewMemberName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <Button Content="Member追加"
+                            Command="{Binding AddMemberCommand}" />
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+
+</UserControl>

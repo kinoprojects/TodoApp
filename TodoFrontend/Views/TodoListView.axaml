@@ -1,0 +1,135 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="TodoFrontend.TodoListView">
+  <Grid Margin="20"
+        RowDefinitions="Auto,Auto,Auto,*"
+        RowSpacing="12">
+
+        
+
+        <Button Grid.Row="0"
+                Content="管理画面へ"
+                Command="{Binding ShowManagementCommand}" />
+
+        <Border Grid.Row="1"
+            Padding="12"
+            BorderThickness="1"
+            BorderBrush="Gray">
+            <StackPanel Spacing="8">
+                <TextBlock Text="絞り込み" FontSize="18" FontWeight="Bold" />
+
+                <TextBox Watermark="Project名で絞り込み"
+                    Text="{Binding FilterProjectName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                <TextBox Watermark="Team名で絞り込み"
+                    Text="{Binding FilterTeamName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="絞り込み"
+                        Command="{Binding ApplyFilterCommand}" />
+
+                    <Button Content="クリア"
+                        Command="{Binding ClearFilterCommand}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="2"
+                Padding="12"
+                Margin="0,0,0,12"
+                BorderThickness="1"
+                BorderBrush="Gray">
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="Todo追加"
+                           FontSize="18"
+                           FontWeight="Bold" />
+
+                <TextBox Watermark="タイトル"
+                         Text="{Binding NewTodoTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                <TextBox Watermark="TeamName"
+                         Text="{Binding NewTodoTeamName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                <TextBox Watermark="MemberName"
+                         Text="{Binding NewTodoMemberNames, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                <Button Content="追加"
+                        Command="{Binding AddTodoCommand}" />
+            </StackPanel>
+        </Border>
+
+        <ListBox Grid.Row="3"
+                 ItemsSource="{Binding Todos}">
+
+            <ListBox.ItemTemplate>
+    <DataTemplate>
+        <Border Padding="12"
+                Margin="0,6"
+                BorderThickness="1"
+                BorderBrush="Gray"
+                CornerRadius="6">
+
+            <StackPanel Spacing="6">
+
+                <!-- Todo名 -->
+                <TextBlock Text="{Binding Title}"
+                           FontSize="18"
+                           FontWeight="Bold" />
+
+                <!-- 担当チーム -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="6">
+                    <TextBlock Text="担当チーム:"
+                               FontWeight="Bold" />
+                    <TextBlock Text="{Binding TeamName}" />
+                </StackPanel>
+
+                <!-- 担当メンバー -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="6">
+                    <TextBlock Text="担当メンバー:"
+                               FontWeight="Bold" />
+                    <TextBlock Text="{Binding MemberNames}" />
+                </StackPanel>
+
+                <!-- ステータス -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                            Spacing="6">
+                    <TextBlock Text="ステータス:" VerticalAlignment="Center"
+                               FontWeight="Bold" />
+                    <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- 対象プロジェクト -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="6">
+                    <TextBlock Text="対象プロジェクト:"
+                               FontWeight="Bold" />
+                    <TextBlock Text="{Binding ProjectName}" />
+                </StackPanel>
+
+                <!-- 操作ボタン -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            Margin="0,8,0,0">
+                    <Button Content="完了"
+                            Command="{Binding DataContext.UpdateTodoCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                            CommandParameter="{Binding Id}" />
+
+                    <Button Content="削除"
+                            Command="{Binding DataContext.DeleteTodoCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                            CommandParameter="{Binding Id}" />
+                </StackPanel>
+
+            </StackPanel>
+        </Border>
+    </DataTemplate>
+</ListBox.ItemTemplate>
+        </ListBox>
+
+    </Grid>
+</UserControl>

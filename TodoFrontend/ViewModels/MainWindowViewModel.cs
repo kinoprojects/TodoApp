@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -7,10 +7,9 @@ using System.Net.Http.Json;
 using System.Threading.Tasks;
 using TodoFrontend.Models;
 using CommunityToolkit.Mvvm.Input;
-using TodoFrontend.Models;
-using System.Collections.Generic;
-using System.Net.Http.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Avalonia.Controls;
+
 
 namespace TodoFrontend.ViewModels;
 
@@ -57,6 +56,9 @@ public partial class MainWindowViewModel : ViewModelBase
      */
     private readonly HttpClient _httpClient = new();
 
+
+    [ObservableProperty]
+    private UserControl? currentView; // 現在のviewを入れる。public UserControl? CurrentViewが自動生成されるので使える
     /*
      ObservableCollectionは、中身が追加・削除されたことを画面に通知できるListみたいなもの。
 
@@ -67,8 +69,23 @@ public partial class MainWindowViewModel : ViewModelBase
      */
     public ObservableCollection<TodoItemViewModel> Todos { get; } = new();
 
+    // 全権取得用のリスト 
+    private List<TodoItemViewModel> allTodos {get;} = new();
+
+    // 複数あるProjectをうけ取れるようにする
+    public ObservableCollection<ProjectResponse> Projects { get;} = new();
+
+    // 複数あるMemberを受け取れるようにする
+    public ObservableCollection<MemberResponse> Members { get; } = new();
+
+    public ObservableCollection<TeamResponse> Teams {get;} = new();
+
     public MainWindowViewModel()
     {
+        CurrentView = new TodoListView // アプリケーションの起動時にはTodoのviewを持つように指定する
+        {
+            DataContext = this // TodoListView の Binding 先を MainWindowViewModel にする
+        };
         /*
          LoadTodosAsyncが非同期で取得するメソッドになっているから
          awaitって書きたいけど、コンストラクタではawaitを書けない。
@@ -79,6 +96,9 @@ public partial class MainWindowViewModel : ViewModelBase
          ここでの _ は「戻り値は使わないが、処理は開始したい」という意味で使っている。
          */
         _ = LoadTodosAsync();
+        _ = LoadProjectsAsync();
+        _ = LoadTeamsAsync();
+        _ = LoadMembersAsync();
     }
 
     /*
@@ -111,18 +131,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (todos is null)
             {
+                Todos.Clear();
                 // APIからデータが返ってこなかった場合は、ここで処理を終える。
                 return;
             }
-
-            /*
-             すでに画面に表示されているTodoを一度消す。
-
-             これをしないで追加だけすると、再読み込みしたときに
-             同じTodoが重複して表示される可能性がある。
-             */
-            Todos.Clear();
-
+            
             foreach (var todo in todos)
             {
                 /*
@@ -132,15 +145,17 @@ public partial class MainWindowViewModel : ViewModelBase
                  APIの形と画面の形を分けておくと、
                  API側のデータ構造と画面表示の都合を切り離して考えやすくなる。
                  */
-                Todos.Add(new TodoItemViewModel
+                allTodos.Add(new TodoItemViewModel
                 {
                     Id = todo.Id,
                     Title = todo.Title,
                     Status = todo.Status,
-                    TeamName = $"TeamId: {todo.TeamId}",
+                    ProjectName = todo.ProjectName ?? "Project未設定",
+                    TeamName = todo.TeamName ?? $"TeamId: {todo.TeamId}",
                     MemberNames = todo.Members.Count == 0 ? "担当なし" : string.Join(", ", todo.Members.Select(m => m.MemberName))
                 });
             }
+            ApplyTodoFilter();
         }
         catch (Exception ex)
         {
@@ -154,57 +169,176 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+
+    private async Task LoadProjectsAsync()
+    {
+        try
+        {
+            var projects =await _httpClient.GetFromJsonAsync<List<ProjectResponse>>(
+                "http://localhost:5128/api/Projects"
+            );
+
+            if (projects is null)
+            {
+                // APIからデータが返ってこなかった場合は、ここで処理を終える。
+                return;
+            }
+            Projects.Clear();
+            foreach(var project in projects)
+            {
+                Projects.Add(project);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Project一覧の取得に失敗しました: {ex.Message}");
+        }
+    }
+
+    private async Task LoadTeamsAsync()
+    {
+        try
+        {
+            var teams = await _httpClient.GetFromJsonAsync<List<TeamResponse>>(
+                "http://localhost:5128/api/teams"
+            );
+
+            Teams.Clear();
+
+            if (teams is null)
+            {
+                return;
+            }
+
+            foreach (var team in teams)
+            {
+                Teams.Add(team);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Team一覧の取得に失敗しました: {ex.Message}");
+        }
+}
+
+    private async Task LoadMembersAsync()
+    {
+        try
+        {
+            var members =await _httpClient.GetFromJsonAsync<List<MemberResponse>>(
+                "http://localhost:5128/api/Members"
+            );
+
+            if (members is null)
+            {
+                // APIからデータが返ってこなかった場合は、ここで処理を終える。
+                return;
+            }
+            Members.Clear();
+            foreach(var member in members)
+            {
+                Members.Add(member);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Member一覧の取得に失敗しました: {ex.Message}");
+        }
+    }
+
+    /*
+    privateフィールドは小文字
+    publicプロパティは大文字
+    [ObservableProperty] が大文字プロパティを自動生成する
+    XAML Bindingは大文字プロパティを見る
+    
+    */
     [ObservableProperty]
     private string newTodoTitle = string.Empty;
 
     [ObservableProperty]
-    private string newTodoTeamId = string.Empty;
+    private string newTodoTeamName = string.Empty;
 
     [ObservableProperty]
-    private string newTodoMemberId = string.Empty;
+    private string newTodoMemberNames = string.Empty;
+
+    [ObservableProperty]
+    private string newProjectName = string.Empty;
+
+    [ObservableProperty]
+    private string newTeamProjectName = string.Empty;
+
+    [ObservableProperty]
+    private string newTeamName = string.Empty;
+
+    [ObservableProperty]
+    private string newMemberName = string.Empty;
+
+    // 絞り込み用プロパティ
+    [ObservableProperty]
+    private string filterProjectName = string.Empty;
+
+    [ObservableProperty]
+    private string filterTeamName = string.Empty;
 
 
     // CommunityToolkit.Mvvmの機能で、AddTodoCommandを作ってくれて、xaml側でBindingコマンドとして使用できるようになる
     [RelayCommand]
     private async Task AddTodoAsync()
     {
-        Console.WriteLine("AddTodoAsync が呼ばれました");
-
-        if (string.IsNullOrWhiteSpace(newTodoTitle))
+        if (string.IsNullOrWhiteSpace(NewTodoTitle))
         {
             Console.WriteLine("タイトルを入力してください。");
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(newTodoTitle))
+        if (string.IsNullOrWhiteSpace(NewTodoTeamName))
         {
-            Console.WriteLine("タイトルを入力してください。");
+            Console.WriteLine("Team名を入力してください。");
             return;
         }
 
-        // NewTodoTeamIdをIntに変換できるかk、できたらteamIdに入れる、無理ならエラー扱いにする。
-        if (!int.TryParse(newTodoTeamId, out var teamId))
+        var team = Teams.FirstOrDefault(t => t.Name == NewTodoTeamName);
+
+        if (team is null)
         {
-            Console.WriteLine("TeamIdは数値で入力してください。");
+            Console.WriteLine($"指定されたTeamが見つかりません: {NewTodoTeamName}");
             return;
         }
+
+        var teamId = team.Id;
         
         var memberIds = new List<int>();
 
-        if(!string.IsNullOrWhiteSpace(newTodoMemberId))
+        if(!string.IsNullOrWhiteSpace(NewTodoMemberNames))
         {
-            if(!int.TryParse(newTodoMemberId, out var memberId))
-            {
-                Console.WriteLine("MemberIdは数値で入力してください。");
-                return;
-            }
-            memberIds.Add(memberId);
-        }
+            var memberNames = NewTodoMemberNames.Split(',');
 
+            foreach (var memberNameText in memberNames)
+            {
+                var memberName = memberNameText.Trim();
+
+                if (string.IsNullOrWhiteSpace(memberName))
+                {
+                    continue;
+                }
+
+                var member = Members.FirstOrDefault(m => m.Name == memberName);
+
+                if (member is null)
+                {
+                    Console.WriteLine($"指定されたMemberが見つかりません: {memberName}");
+                    return;
+                }
+
+                memberIds.Add(member.Id);
+            }
+        }
+        Console.WriteLine($"memberIds: {string.Join(", ", memberIds)}");
         var request = new CreateTodoRequest
         {
             TeamId = teamId,
-            Title = newTodoTitle,
+            Title = NewTodoTitle,
             Status = "Todo",
             MemberIds = memberIds
         };
@@ -222,10 +356,226 @@ public partial class MainWindowViewModel : ViewModelBase
             Console.WriteLine($"ErrorBody: {error}");
             return;
         }
-        newTodoTitle = string.Empty;
-        newTodoTeamId = string.Empty;
-        newTodoMemberId = string.Empty;
+        NewTodoTitle = string.Empty;
+        NewTodoTeamName = string.Empty;
+        NewTodoMemberNames = string.Empty;
 
         await LoadTodosAsync();
     }
+
+    [RelayCommand]
+    private void ShowTodoList()
+    {
+        CurrentView = new TodoListView
+        {
+            DataContext = this
+        };
+    }
+
+    [RelayCommand]
+    private void ShowManagement()
+    {
+        CurrentView = new ManagementView
+        {
+            DataContext = this
+        };
+    }
+
+    [RelayCommand]
+    private async Task AddProjectAsync()
+    {
+        if(string.IsNullOrWhiteSpace(NewProjectName))
+        {
+            Console.WriteLine("Project名を入力してください");
+            return;
+        }
+
+        var request = new CreateProjectRequest
+        {
+            Name = NewProjectName
+        };
+
+        var response = await _httpClient.PostAsJsonAsync(
+            "http://localhost:5128/api/Projects",
+            request
+        );
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            Console.WriteLine("Project追加に失敗しました");
+            Console.WriteLine($"StatusCode: {(int)response.StatusCode} {response.StatusCode}");
+            Console.WriteLine($"ErrorBody: {error}");
+            return;
+        }
+
+        NewProjectName = string.Empty;
+        await LoadProjectsAsync();
+        Console.WriteLine("Projectを追加しました");
+    }
+
+    [RelayCommand]
+    private async Task AddTeamAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NewTeamProjectName))
+        {
+            Console.WriteLine("Project名を入力してください。");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(NewTeamName))
+        {
+            Console.WriteLine("Team名を入力してください。");
+            return;
+        }
+
+        var project = Projects.FirstOrDefault(p => p.Name == NewTeamProjectName);
+
+        if (project is null)
+        {
+            Console.WriteLine($"指定されたProjectが見つかりません: {NewTeamProjectName}");
+            return;
+        }
+
+        var request = new CreateTeamRequest
+        {
+            ProjectId = project.Id,
+            Name = NewTeamName
+        };
+
+        var response = await _httpClient.PostAsJsonAsync(
+            "http://localhost:5128/api/teams",
+            request
+        );
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            Console.WriteLine("Team追加に失敗しました");
+            Console.WriteLine($"StatusCode: {(int)response.StatusCode} {response.StatusCode}");
+            Console.WriteLine($"ErrorBody: {error}");
+            return;
+        }
+
+        NewTeamProjectName = string.Empty;
+        NewTeamName = string.Empty;
+        LoadTeamsAsync();
+        Console.WriteLine("Teamを追加しました");
+    }
+
+    [RelayCommand]
+    private async Task AddMemberAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NewMemberName))
+        {
+            Console.WriteLine("Member名を入力してください。");
+            return;
+        }
+
+        var request = new CreateMemberRequest
+        {
+            Name = NewMemberName
+        };
+
+        var response = await _httpClient.PostAsJsonAsync(
+            "http://localhost:5128/api/members",
+            request
+        );
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            Console.WriteLine("Member追加に失敗しました");
+            Console.WriteLine($"StatusCode: {(int)response.StatusCode} {response.StatusCode}");
+            Console.WriteLine($"ErrorBody: {error}");
+            return;
+        }
+
+        NewMemberName = string.Empty;
+        await LoadMembersAsync();
+        Console.WriteLine("Memberを追加しました");
+    }
+
+    [RelayCommand]
+    private async Task DeleteTodoAsync(int todoId)
+    {
+        var response = await _httpClient.DeleteAsync(
+            $"http://localhost:5128/api/todos/{todoId}"
+        );
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            Console.WriteLine("Todo削除に失敗しました");
+            Console.WriteLine($"StatusCode: {(int)response.StatusCode} {response.StatusCode}");
+            Console.WriteLine($"ErrorBody: {error}");
+            return;
+        }
+
+        await LoadTodosAsync();
+    }
+
+    [RelayCommand]
+    private async Task UpdateTodoAsync(int todoId)
+    {
+        var request = new UpdateTodoStatusRequest
+        {
+            Status = "Done"
+        };
+
+        var response = await _httpClient.PutAsJsonAsync(
+            $"http://localhost:5128/api/todos/{todoId}/status",
+            request
+        );
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            Console.WriteLine("Status更新に失敗しました");
+            Console.WriteLine($"StatusCode: {(int)response.StatusCode} {response.StatusCode}");
+            Console.WriteLine($"ErrorBody: {error}");
+            return;
+        }
+
+        await LoadTodosAsync();
+    }
+
+    // 絞り込み処理
+    private void ApplyTodoFilter()
+    {
+        var filteredTodos = allTodos.AsEnumerable();
+
+        if(!string.IsNullOrWhiteSpace(FilterProjectName))
+        {
+            filteredTodos = filteredTodos.Where(todo =>
+            todo.ProjectName.Contains(FilterProjectName,StringComparison.OrdinalIgnoreCase));
+        }
+
+        if(!string.IsNullOrWhiteSpace(FilterTeamName))
+        {
+            filteredTodos = filteredTodos.Where(todo =>
+            todo.TeamName.Contains(FilterTeamName,StringComparison.OrdinalIgnoreCase));
+        }
+
+        Todos.Clear();
+
+        foreach (var todo in filteredTodos)
+        {
+            Todos.Add(todo);
+        }
+    }
+
+    [RelayCommand]
+    private void ApplyFilter()
+    {
+        ApplyTodoFilter();
+    }
+
+    [RelayCommand]
+    private void ClearFilter()
+    {
+        FilterProjectName = string.Empty;
+        FilterTeamName = string.Empty;
+
+        ApplyTodoFilter();
+    }
+
 }    

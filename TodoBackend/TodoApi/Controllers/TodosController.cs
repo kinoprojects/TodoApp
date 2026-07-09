@@ -67,7 +67,11 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
         var todos = await _context.TodoItems
             .Include(t => t.MemberTodoItems)
             .ThenInclude(tm => tm.Member)
-            .OrderBy(todo => todo.CreatedAt)
+            .Include(t => t.Team)
+            .ThenInclude(team => team.Project)
+            .OrderBy(t => t.Team!.Project!.Name)
+            .ThenBy(t => t.Team!.Name)
+            .ThenBy( t => t.CreatedAt)
             .ToListAsync();
         
         // 複数あるtodosの中身を1つ1つ取り出して変換していっている。ここでのselectは選択ではないのがみそ。
@@ -75,6 +79,9 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
         {
             todo.Id,
             todo.TeamId,
+            TeamName = todo.Team!.Name,
+            ProjectId = todo.Team?.ProjectId,
+            ProjectName = todo.Team?.Project?.Name,
             todo.Title,
             Status = todo.Status.ToString(),
             todo.CreatedAt,
@@ -221,6 +228,24 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
         await _context.SaveChangesAsync();
 
         return NoContent(); // 204 No Content。成功したが、返すデータはないという意味。
+    }
+
+    [HttpPut("{id}/status")]
+    public async Task<IActionResult> UpdateTodoStatus(int id, UpdateTodoStatusRequest request)
+    {
+        var todo = await _context.TodoItems.FindAsync(id);
+
+        if (todo is null)
+        {
+            return NotFound();
+        }
+
+        todo.Status = request.Status;
+        todo.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return NoContent();
     }
 
     /*
