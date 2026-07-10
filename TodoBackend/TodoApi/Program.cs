@@ -10,8 +10,8 @@ using System.Text.Json.Serialization;
  compose.yml
  → MySQLのコンテナを用意する
 
- appsettings.json
- → MySQLへ接続するための文字列を書く
+ 環境変数 ConnectionStrings__DefaultConnection
+ → MySQLへ接続するための文字列を渡す
 
  Program.cs
  → appsettings.jsonの接続文字列を読み取り、AppDbContextに渡す準備をする
@@ -44,9 +44,10 @@ var builder = WebApplication.CreateBuilder(args);
  */
 builder.Services.AddControllers()
     //ControllerがJSONを読み書きするときの設定を追加して、enumをJSONでは文字列として扱うようにしている
+    // allowIntegerValues: false にすることで、0や1のような数値enumの入力は受け付けない
     .AddJsonOptions(options =>
     {
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false));
     });
 
 /*
@@ -57,7 +58,7 @@ builder.Services.AddControllers()
 
  データベース接続の流れ:
  1. compose.ymlでMySQLを起動する
- 2. appsettings.jsonのDefaultConnectionに接続情報を書く
+ 2. 環境変数ConnectionStrings__DefaultConnectionに接続情報を書く
  3. Program.csでDefaultConnectionを読み取る
  4. UseMySQLに渡す
  5. AppDbContextがその設定でデータベースを操作できるようになる
@@ -65,12 +66,16 @@ builder.Services.AddControllers()
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     /*
-     appsettings.jsonからDefaultConnectionという名前の接続文字列を取ってくる。
-
-     今のappsettings.jsonでは、MySQLの接続先、データベース名、
-     ユーザー名、パスワードがここに書かれている。
+     appsettings.jsonまたは環境変数からDefaultConnectionという名前の接続文字列を取ってくる。
+     実際のユーザー名やパスワードはConnectionStrings__DefaultConnectionで渡す。
      */
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException(
+            "Connection string 'DefaultConnection' is not configured. Set ConnectionStrings__DefaultConnection.");
+    }
 
     // EF Coreに「MySQLを使って、この接続文字列でつないでください」と教える。
     options.UseMySQL(connectionString);
