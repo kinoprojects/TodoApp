@@ -1,9 +1,9 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Data.Core;
-using Avalonia.Data.Core.Plugins;
-using System.Linq;
 using Avalonia.Markup.Xaml;
+using System;
+using System.Net.Http;
+using TodoFrontend.Services;
 using TodoFrontend.ViewModels;
 using TodoFrontend.Views;
 
@@ -20,10 +20,26 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            /*
+             HttpClientはここで作り、ViewModelには直接渡さない。
+             ViewModelへ渡すのはTodoApiClientなので、ViewModelはHTTPの作り方を知らなくてよい。
+            */
+            var httpClient = new HttpClient
+            {
+                BaseAddress = new Uri(TodoApiOptions.BaseUrl)
+            };
+            var viewModel = new MainWindowViewModel(new TodoApiClient(httpClient));
+
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel(),
+                DataContext = viewModel,
             };
+
+            /*
+             初期ロードはWindowが開いてから始める。
+             コンストラクタ内で通信しないことで、デザイン時表示やテストで勝手にAPIへ接続しないようにしている。
+            */
+            desktop.MainWindow.Opened += async (_, _) => await viewModel.InitializeAsync();
         }
 
         base.OnFrameworkInitializationCompleted();

@@ -63,23 +63,26 @@ builder.Services.AddControllers()
  4. UseMySQLに渡す
  5. AppDbContextがその設定でデータベースを操作できるようになる
  */
-builder.Services.AddDbContext<AppDbContext>(options =>
+if (!builder.Environment.IsEnvironment("Testing"))
 {
-    /*
-     appsettings.jsonまたは環境変数からDefaultConnectionという名前の接続文字列を取ってくる。
-     実際のユーザー名やパスワードはConnectionStrings__DefaultConnectionで渡す。
-     */
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-
-    if (string.IsNullOrWhiteSpace(connectionString))
+    builder.Services.AddDbContext<AppDbContext>(options =>
     {
-        throw new InvalidOperationException(
-            "Connection string 'DefaultConnection' is not configured. Set ConnectionStrings__DefaultConnection.");
-    }
+        /*
+         appsettings.jsonまたは環境変数からDefaultConnectionという名前の接続文字列を取ってくる。
+         実際のユーザー名やパスワードはConnectionStrings__DefaultConnectionで渡す。
+         */
+        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-    // EF Coreに「MySQLを使って、この接続文字列でつないでください」と教える。
-    options.UseMySQL(connectionString);
-});
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                "Connection string 'DefaultConnection' is not configured. Set ConnectionStrings__DefaultConnection.");
+        }
+
+        // EF Coreに「MySQLを使って、この接続文字列でつないでください」と教える。
+        options.UseMySQL(connectionString);
+    });
+}
 
 /*
  OpenAPIを使えるようにする。
@@ -119,3 +122,7 @@ app.MapControllers();
 
 // アプリを起動し、HTTPリクエストを待ち受ける。
 app.Run();
+
+public partial class Program
+{
+}

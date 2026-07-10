@@ -1,6 +1,15 @@
 @TodoApi_HostAddress = http://localhost:5128
 
-GET {{TodoApi_HostAddress}}/weatherforecast/
+GET {{TodoApi_HostAddress}}/api/todos
 Accept: application/json
 
 ###
+
+POST {{TodoApi_HostAddress}}/api/todos
+Content-Type: application/json
+
+{
+  "teamId": 1,
+  "title": "設計",
+  "status": "Todo"
+}

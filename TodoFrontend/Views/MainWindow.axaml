@@ -9,5 +9,17 @@
         Icon="/Assets/avalonia-logo.ico"
         Title="TodoFrontend">
 
-    <ContentControl Content="{Binding CurrentView}" />
+    <Grid RowDefinitions="Auto,*">
+        <TextBlock Grid.Row="0"
+                   IsVisible="{Binding HasErrorMessage}"
+                   Text="{Binding ErrorMessage}"
+                   Margin="20,12,20,0"
+                   Padding="12"
+                   Background="#FFF1F0"
+                   Foreground="#B42318"
+                   TextWrapping="Wrap" />
+
+        <ContentControl Grid.Row="1"
+                        Content="{Binding CurrentView}" />
+    </Grid>
 </Window>
