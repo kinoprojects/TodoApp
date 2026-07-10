@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TodoApi.Data;
 using TodoApi.Models;
+using TodoApi.Dtos;
 
 /*
  Todoに関するAPIの入り口になるクラス。
@@ -66,7 +67,11 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
         var todos = await _context.TodoItems
             .Include(t => t.MemberTodoItems)
             .ThenInclude(tm => tm.Member)
-            .OrderBy(todo => todo.CreatedAt)
+            .Include(t => t.Team)
+            .ThenInclude(team => team.Project)
+            .OrderBy(t => t.Team!.Project!.Name)
+            .ThenBy(t => t.Team!.Name)
+            .ThenBy( t => t.CreatedAt)
             .ToListAsync();
         
         // 複数あるtodosの中身を1つ1つ取り出して変換していっている。ここでのselectは選択ではないのがみそ。
@@ -74,6 +79,9 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
         {
             todo.Id,
             todo.TeamId,
+            TeamName = todo.Team!.Name,
+            ProjectId = todo.Team?.ProjectId,
+            ProjectName = todo.Team?.Project?.Name,
             todo.Title,
             Status = todo.Status.ToString(),
             todo.CreatedAt,
@@ -124,32 +132,67 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
      入力フォームから新しいTodoを追加するときなどに使う。
      */
     [HttpPost]
-    public async Task<ActionResult<TodoItem>> CreateTodo(TodoItem todo)
+    public async Task<ActionResult> CreateTodo(CreateTodoRequest request)
     {
-        /*
-         Idを0にしておくと、EF Coreが「これは新しく追加するデータ」と判断し、
-         データベースに保存するときに新しいIdを付けてくれる。
-         */
-        todo.Id = 0;
+        // 送られてきた TeamId の Team が本当に存在するか確認
+        var teamExists = await _context.Teams.AnyAsync(t => t.Id == request.TeamId);
 
-        // 作成日時はサーバー側で入れる。ユーザーから送られた日時をそのまま信じないため。
-        todo.CreatedAt = DateTime.UtcNow;
-        todo.UpdatedAt = DateTime.UtcNow;
+        if(!teamExists)
+        {
+            return NotFound("指定されたTeamが存在しません。");
+        }
 
-        // Addは「追加予定」にする処理。まだこの時点ではデータベースには保存されていない。
-        _context.TodoItems.Add(todo);
+        
+        // 送られてきたMemberIdsのうち、DBに実在するMemberIdだけを取り出す
+        var existingMemberIds = await _context.Members.Where(m => request.MemberIds.Contains(m.Id))
+            .Select(m => m.Id)
+            .ToListAsync();
 
-        // SaveChangesAsyncで、追加予定だった内容を実際にデータベースへ保存する。
+        // 送られてきたMemberIdsから、実在したMemberIdsを引いて、存在しないMemberIdを見つける。existingMemberIdsに存在していたIDが入ってるので、あとはリクエストのあったものとの比較になる。
+        var missingMemberIds = request.MemberIds.Except(existingMemberIds).ToList();
+
+        if (missingMemberIds.Count > 0)
+        {
+            return NotFound($"存在しないMemberIdがあります: {string.Join(", ", missingMemberIds)}");
+        }
+
+        
+        //CreateTodoRequestからTodoItemに変換してる
+        var todoItem = new TodoItem
+        {
+            TeamId = request.TeamId,
+            Title = request.Title,
+            Status = request.Status
+        };
+
+        // DBに保存している
+        _context.TodoItems.Add(todoItem);
         await _context.SaveChangesAsync();
 
-        /*
-         201 Createdを返す。
+        // 担当Memberとの関連を作成している。memberIds の数だけ MemberTodoItem を作る。Distinct() は重複削除
+        foreach (var memberId in request.MemberIds.Distinct())
+        {
+            var memberTodoItem = new MemberTodoItem
+            {
+                TodoItemId = todoItem.Id,
+                MemberId = memberId
+            };
 
-         CreatedAtActionは、
-         「作成できました。作成したデータはGetTodoにこのidを渡すと取得できます」
-         という意味をレスポンスに含められる。
-         */
-        return CreatedAtAction(nameof(GetTodo), new { id = todo.Id }, todo);
+            _context.MemberTodoItems.Add(memberTodoItem);
+        }
+        await _context.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(GetTodo), new { id = todoItem.Id }, new
+        {
+            todoItem.Id,
+            todoItem.TeamId,
+            todoItem.Title,
+            Status = todoItem.Status.ToString(),
+            todoItem.CreatedAt,
+            todoItem.UpdatedAt,
+            MemberIds = request.MemberIds.Distinct()
+
+        });
     }
 
     /*
@@ -185,6 +228,24 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
         await _context.SaveChangesAsync();
 
         return NoContent(); // 204 No Content。成功したが、返すデータはないという意味。
+    }
+
+    [HttpPut("{id}/status")]
+    public async Task<IActionResult> UpdateTodoStatus(int id, UpdateTodoStatusRequest request)
+    {
+        var todo = await _context.TodoItems.FindAsync(id);
+
+        if (todo is null)
+        {
+            return NotFound();
+        }
+
+        todo.Status = request.Status;
+        todo.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return NoContent();
     }
 
     /*

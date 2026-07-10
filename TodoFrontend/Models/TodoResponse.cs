@@ -8,7 +8,13 @@ namespace TodoFrontend.Models;
 public class TodoResponse
 {
     public int Id { get; set; }
+
     public int TeamId { get; set; }
+    public string? TeamName { get; set;}
+
+    public int? ProjectId { get; set; }
+    public string? ProjectName { get; set; }
+    
     public string Title { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public List<TodoMemberResponse> Members { get; set; } = new();
