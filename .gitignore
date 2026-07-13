@@ -1,6 +1,7 @@
 bin/
 obj/
 .DS_Store
+.env
 
 .vs/
 .vscode/*.log

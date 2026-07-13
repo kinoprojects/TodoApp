@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using TodoApi.Models;
 
 namespace TodoApi.Dtos;
@@ -6,9 +7,12 @@ namespace TodoApi.Dtos;
 public class CreateTodoRequest
 {
     // どのTeamに属するTodoか
+    [Range(1, int.MaxValue)]
     public int TeamId { get; set; }
 
     // Todoのタイトル
+    [Required]
+    [StringLength(200)]
     public string Title { get; set; } = string.Empty;
 
     // Todoの状態。指定がなければTodoが入る
@@ -17,4 +21,3 @@ public class CreateTodoRequest
     // Memberの一覧を受け取る。複数人受け取れるようにする
     public List<int> MemberIds { get; set; } = new();
 }
-

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TodoApi.Data;
+using TodoApi.Dtos;
 using TodoApi.Models;
 
 namespace TodoApi.Controllers;
@@ -39,6 +40,11 @@ public class TeamsController : ControllerBase
                                        .Include(t => t.TeamMembers)
                                             .ThenInclude(tm => tm.Member)
                                        .FirstOrDefaultAsync(t => t.Id == id);
+        
+        if (team is null)
+        {
+            return NotFound();
+        }
 
         var response = new
         {
@@ -66,54 +72,104 @@ public class TeamsController : ControllerBase
                 })
             })
         };
-        
-        if (team is null)
-        {
-            return NotFound();
-        }
-
-
 
         return Ok(response);
     }
 
     [HttpPost]
-    public async Task<ActionResult<Team>> CreateTeam(Team team)
+    public async Task<ActionResult<TeamResponse>> CreateTeam(CreateTeamRequest request)
     {
-        team.Id = 0;
+        var name = request.Name.Trim();
 
-        team.CreatedAt = DateTime.UtcNow;
-        team.UpdatedAt = DateTime.UtcNow;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return BadRequest("Name is required.");
+        }
+
+        var projectExists = await _context.Projects.AnyAsync(p => p.Id == request.ProjectId);
+
+        if (!projectExists)
+        {
+            return BadRequest($"ProjectId {request.ProjectId} does not exist.");
+        }
+
+        var teamNameExists = await _context.Teams
+            .AnyAsync(t => t.ProjectId == request.ProjectId && t.Name == name);
+
+        if (teamNameExists)
+        {
+            return Conflict($"Team name '{name}' already exists in ProjectId {request.ProjectId}.");
+        }
+
+        var team = new Team
+        {
+            ProjectId = request.ProjectId,
+            Name = name,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
 
         _context.Teams.Add(team);
 
         await _context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetTeam), routeValues: new { id = team.Id }, team);
+        var response = new TeamResponse
+        {
+            Id = team.Id,
+            ProjectId = team.ProjectId,
+            Name = team.Name,
+            CreatedAt = team.CreatedAt,
+            UpdatedAt = team.UpdatedAt
+        };
+
+        return CreatedAtAction(nameof(GetTeam), routeValues: new { id = team.Id }, response);
     }
 
     [HttpPost("{teamId}/members/{memberId}")]
-    public async Task<ActionResult> CreateTeamMember(int teamId, int memberId, TeamMember teamMember)
+    public async Task<ActionResult<TeamMemberResponse>> CreateTeamMember(int teamId, int memberId, CreateTeamMemberRequest request)
     {
         // 指定されたteamIdがチームテーブルに存在しているか
         var teamExists = await _context.Teams.AnyAsync(t => t.Id == teamId);
         // 指定されたmemberIdがメンバーテーブルに存在しているか
         var memberExists = await _context.Members.AnyAsync(m => m.Id == memberId);
 
-        // どちらかのIDが存在していない場合、notFoundで返す
-        if (!teamExists || !memberExists)
+        if (!teamExists)
         {
-            return NotFound();
+            return BadRequest($"TeamId {teamId} does not exist.");
         }
 
-        teamMember.Id = 0;
-        teamMember.TeamId = teamId;
-        teamMember.MemberId = memberId;
+        if (!memberExists)
+        {
+            return BadRequest($"MemberId {memberId} does not exist.");
+        }
+
+        var teamMemberExists = await _context.TeamMembers
+            .AnyAsync(tm => tm.TeamId == teamId && tm.MemberId == memberId);
+
+        if (teamMemberExists)
+        {
+            return Conflict($"MemberId {memberId} is already assigned to TeamId {teamId}.");
+        }
+
+        var teamMember = new TeamMember
+        {
+            TeamId = teamId,
+            MemberId = memberId,
+            Position = request.Position
+        };
 
         _context.TeamMembers.Add(teamMember);
 
         await _context.SaveChangesAsync();
 
-        return Ok();
+        var response = new TeamMemberResponse
+        {
+            Id = teamMember.Id,
+            TeamId = teamMember.TeamId,
+            MemberId = teamMember.MemberId,
+            Position = teamMember.Position.ToString()
+        };
+
+        return Ok(response);
     }
 }

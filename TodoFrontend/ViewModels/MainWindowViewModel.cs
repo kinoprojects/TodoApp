@@ -2,259 +2,71 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Json;
 using System.Threading.Tasks;
-using TodoFrontend.Models;
-using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.ComponentModel;
 using Avalonia.Controls;
-
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using TodoFrontend.Models;
+using TodoFrontend.Services;
 
 namespace TodoFrontend.ViewModels;
 
-/*
- MainWindowViewModelは、画面とデータの間をつなぐクラス。
-
- このファイルの大きな役割は、既存コメントにもある通り、
- APIからTodo一覧を取得し、画面表示用のTodosコレクションに入れて
- MainWindow.axamlのListBoxに表示させること。
-
- 関連ファイルとのつながり:
- 1. MainWindow.axaml
-    画面の見た目を書く場所。
-    ListBoxのItemsSource="{Binding Todos}" によって、
-    このクラスのTodosを画面に表示している。
-
- 2. TodoResponse.cs
-    APIから返ってくるJSONを受け止めるための形。
-    ここではGetFromJsonAsync<List<TodoResponse>>で使っている。
-
- 3. TodoItemViewModel.cs
-    画面に表示しやすい形に整えたTodo 1件分の形。
-    APIから受け取ったTodoResponseを、TodoItemViewModelに詰め替えている。
-
- 4. TodoBackend側の /api/todos
-    Todo一覧を返すAPI。
-    このViewModelはHttpClientを使って、そのAPIへアクセスしている。
-
- 画面開発で迷ったときは、
- 「APIから受け取る形」はModel、
- 「画面に出す形」はViewModel、
- 「実際の見た目」はView
- と考えると立ち返りやすい。
- */
 public partial class MainWindowViewModel : ViewModelBase
 {
     /*
-     HTTP通信をするための道具を作成。
-     AvaloniaアプリからASP.NET Core APIにアクセスするために使います。
-     それ以外のインスタンスに差し替えたりはしない。
+     ViewModelは「画面の状態」と「画面からの操作」を担当する。
+     HTTPのURLや送信方法までここに書くと、画面の都合と通信の都合が混ざってしまう。
+     そのため、API通信はITodoApiClientに任せ、ViewModelは「Todoを取得して」と依頼するだけにしている。
+    */
+    private readonly ITodoApiClient apiClient;
 
-     今回はこの_httpClientを使って、
-     バックエンドの http://localhost:5128/api/todos にアクセスしている。
-     */
-    private readonly HttpClient _httpClient = new();
-
+    /*
+     allTodosはAPIから取得したTodoの元リスト。
+     Todosは画面に表示するリスト。
+     分けておくと、絞り込みを解除したときにAPIへ再取得しなくても元の一覧に戻せる。
+    */
+    private readonly List<TodoItemViewModel> allTodos = new();
 
     [ObservableProperty]
-    private UserControl? currentView; // 現在のviewを入れる。public UserControl? CurrentViewが自動生成されるので使える
-    /*
-     ObservableCollectionは、中身が追加・削除されたことを画面に通知できるListみたいなもの。
-
-     MainWindow.axamlのListBoxはこのTodosを見ている。
-     そのため、TodosにTodoItemViewModelを追加すると、画面側にも反映される。
-
-     TodoItemViewModelを複数持てる一覧を空で用意している。
-     */
-    public ObservableCollection<TodoItemViewModel> Todos { get; } = new();
-
-    // 全権取得用のリスト 
-    private List<TodoItemViewModel> allTodos {get;} = new();
-
-    // 複数あるProjectをうけ取れるようにする
-    public ObservableCollection<ProjectResponse> Projects { get;} = new();
-
-    // 複数あるMemberを受け取れるようにする
-    public ObservableCollection<MemberResponse> Members { get; } = new();
-
-    public ObservableCollection<TeamResponse> Teams {get;} = new();
-
-    public MainWindowViewModel()
-    {
-        CurrentView = new TodoListView // アプリケーションの起動時にはTodoのviewを持つように指定する
-        {
-            DataContext = this // TodoListView の Binding 先を MainWindowViewModel にする
-        };
-        /*
-         LoadTodosAsyncが非同期で取得するメソッドになっているから
-         awaitって書きたいけど、コンストラクタではawaitを書けない。
-
-         そのため、使わない変数 _ に入れる形で、
-         画面が作られたタイミングでTodo取得処理を開始している。
-
-         ここでの _ は「戻り値は使わないが、処理は開始したい」という意味で使っている。
-         */
-        _ = LoadTodosAsync();
-        _ = LoadProjectsAsync();
-        _ = LoadTeamsAsync();
-        _ = LoadMembersAsync();
-    }
+    private UserControl? currentView;
 
     /*
-     APIからTodo一覧を読み込む処理。
-
-     async Taskになっているのは、HTTP通信のように時間がかかる処理を
-     画面を止めずに待つため。
-
-     流れ:
-     1. APIへGETリクエストを送る
-     2. JSONをList<TodoResponse>として受け取る
-     3. 画面表示用のTodosを一度空にする
-     4. TodoResponseをTodoItemViewModelに詰め替える
-     5. Todosに追加して、ListBoxに表示させる
-     */
-    private async Task LoadTodosAsync()
-    {
-        try
-        {
-            /*
-             http://localhost:5128/api/todos にGETリクエストを送る
-              ↓
-             返ってきたJSONを List<TodoResponse> に変換する
-              ↓
-             結果を todos 変数に入れる
-            */
-            var todos = await _httpClient.GetFromJsonAsync<List<TodoResponse>>(
-                "http://localhost:5128/api/todos"
-            );
-
-            allTodos.Clear();
-
-            if (todos is null)
-            {
-                Todos.Clear();
-                // APIからデータが返ってこなかった場合は、ここで処理を終える。
-                return;
-            }
-            
-            foreach (var todo in todos)
-            {
-                /*
-                 APIから受け取ったTodoResponseを、
-                 画面表示用のTodoItemViewModelに変換してTodosへ追加する。
-
-                 APIの形と画面の形を分けておくと、
-                 API側のデータ構造と画面表示の都合を切り離して考えやすくなる。
-                 */
-                allTodos.Add(new TodoItemViewModel
-                {
-                    Id = todo.Id,
-                    Title = todo.Title,
-                    Status = todo.Status,
-                    ProjectName = todo.ProjectName ?? "Project未設定",
-                    TeamName = todo.TeamName ?? $"TeamId: {todo.TeamId}",
-                    MemberNames = todo.Members.Count == 0 ? "担当なし" : string.Join(", ", todo.Members.Select(m => m.MemberName))
-                });
-            }
-            ApplyTodoFilter();
-        }
-        catch (Exception ex)
-        {
-            /*
-             APIに接続できない、JSONの形が合わないなどの問題が起きた場合にここへ来る。
-
-             今は学習用としてConsole.WriteLineでエラーを確認している。
-             実際のアプリでは、画面にエラーメッセージを表示することも多い。
-             */
-            Console.WriteLine(ex);
-        }
-    }
-
-
-    private async Task LoadProjectsAsync()
-    {
-        try
-        {
-            var projects =await _httpClient.GetFromJsonAsync<List<ProjectResponse>>(
-                "http://localhost:5128/api/Projects"
-            );
-
-            if (projects is null)
-            {
-                // APIからデータが返ってこなかった場合は、ここで処理を終える。
-                return;
-            }
-            Projects.Clear();
-            foreach(var project in projects)
-            {
-                Projects.Add(project);
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Project一覧の取得に失敗しました: {ex.Message}");
-        }
-    }
-
-    private async Task LoadTeamsAsync()
-    {
-        try
-        {
-            var teams = await _httpClient.GetFromJsonAsync<List<TeamResponse>>(
-                "http://localhost:5128/api/teams"
-            );
-
-            Teams.Clear();
-
-            if (teams is null)
-            {
-                return;
-            }
-
-            foreach (var team in teams)
-            {
-                Teams.Add(team);
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Team一覧の取得に失敗しました: {ex.Message}");
-        }
-}
-
-    private async Task LoadMembersAsync()
-    {
-        try
-        {
-            var members =await _httpClient.GetFromJsonAsync<List<MemberResponse>>(
-                "http://localhost:5128/api/Members"
-            );
-
-            if (members is null)
-            {
-                // APIからデータが返ってこなかった場合は、ここで処理を終える。
-                return;
-            }
-            Members.Clear();
-            foreach(var member in members)
-            {
-                Members.Add(member);
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Member一覧の取得に失敗しました: {ex.Message}");
-        }
-    }
-
-    /*
-    privateフィールドは小文字
-    publicプロパティは大文字
-    [ObservableProperty] が大文字プロパティを自動生成する
-    XAML Bindingは大文字プロパティを見る
-    
+     ErrorMessageは「ユーザーに見せるエラー文」。
+     HasErrorMessageなどは、その文があるかどうかから作る画面制御用の状態。
+     [NotifyPropertyChangedFor]を付けることで、ErrorMessageが変わったときに関連する表示状態も更新される。
     */
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasErrorMessage))]
+    [NotifyPropertyChangedFor(nameof(ShowEmptyState))]
+    [NotifyPropertyChangedFor(nameof(ShowErrorState))]
+    [NotifyPropertyChangedFor(nameof(IsTodoListVisible))]
+    private string? errorMessage;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowEmptyState))]
+    [NotifyPropertyChangedFor(nameof(ShowErrorState))]
+    [NotifyPropertyChangedFor(nameof(IsTodoListVisible))]
+    private bool isLoading;
+
+    /*
+     画面側で複雑な条件式を書かないため、ViewModel側で表示状態を名前付きプロパティにしている。
+     IsTodoListVisibleはエラー有無を条件に入れていない。
+     理由は、追加や削除に失敗しても、すでに表示できているTodo一覧は消さない方がユーザーに親切だから。
+    */
+    public bool HasErrorMessage => !string.IsNullOrWhiteSpace(ErrorMessage);
+    public bool ShowEmptyState => !IsLoading && !HasErrorMessage && Todos.Count == 0;
+    public bool ShowErrorState => !IsLoading && HasErrorMessage && Todos.Count == 0;
+    public bool IsTodoListVisible => !IsLoading && Todos.Count > 0;
+
+    /*
+     ObservableCollectionは追加・削除を画面に通知できるコレクション。
+     List<T>ではなくこれを使うことで、Todos.AddやTodos.ClearがListBoxへ反映される。
+    */
+    public ObservableCollection<TodoItemViewModel> Todos { get; } = new();
+    public ObservableCollection<ProjectResponse> Projects { get; } = new();
+    public ObservableCollection<MemberResponse> Members { get; } = new();
+    public ObservableCollection<TeamResponse> Teams { get; } = new();
+
     [ObservableProperty]
     private string newTodoTitle = string.Empty;
 
@@ -276,27 +88,142 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string newMemberName = string.Empty;
 
-    // 絞り込み用プロパティ
     [ObservableProperty]
     private string filterProjectName = string.Empty;
 
     [ObservableProperty]
     private string filterTeamName = string.Empty;
 
+    public MainWindowViewModel(ITodoApiClient apiClient, bool createInitialView = true)
+    {
+        this.apiClient = apiClient;
 
-    // CommunityToolkit.Mvvmの機能で、AddTodoCommandを作ってくれて、xaml側でBindingコマンドとして使用できるようになる
+        /*
+         コンストラクタでは通信を始めない。
+         ViewModelを作るだけでHTTP通信が走ると、デザイン時表示やテストでもAPIが必要になってしまう。
+         ここでは最初に表示するViewを決めるだけにして、実データ取得はInitializeAsyncで明示的に行う。
+         テストでは画面部品を作らず状態だけを確認したいので、createInitialViewで切り替えられるようにしている。
+         本来は画面遷移も専用サービスに分けるとさらにテストしやすいが、今は学習段階なので小さな切り替えにしている。
+        */
+        if (createInitialView)
+        {
+            CurrentView = new TodoListView
+            {
+                DataContext = this
+            };
+        }
+    }
+
+    public async Task InitializeAsync()
+    {
+        /*
+         初期データ取得はWindowが開いた後に呼ばれる。
+         画面側に「読み込み中」を出せるよう、通信前後でIsLoadingを切り替える。
+        */
+        IsLoading = true;
+        ErrorMessage = null;
+
+        try
+        {
+            /*
+             ここは順番にawaitしている。
+             複数の取得処理を同時に走らせると、ある処理が失敗してErrorMessageを入れた直後に、
+             別の処理が成功してエラーを消す、といった状態の競合が起きやすい。
+            */
+            await LoadProjectsAsync();
+            await LoadTeamsAsync();
+            await LoadMembersAsync();
+            await LoadTodosAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "初期データを取得できませんでした。API が起動しているか確認してください。";
+            Console.WriteLine($"初期データの取得に失敗しました: {ex.Message}");
+        }
+        finally
+        {
+            IsLoading = false;
+            NotifyTodoListStateChanged();
+        }
+    }
+
+    private async Task LoadTodosAsync()
+    {
+        var todos = await apiClient.GetTodosAsync();
+
+        allTodos.Clear();
+
+        foreach (var todo in todos)
+        {
+            /*
+             APIから返るTodoResponseを、そのまま画面に出すのではなくTodoItemViewModelへ詰め替える。
+             APIの形と画面表示の形を分けると、API側の都合が変わっても画面側の変更を小さくしやすい。
+            */
+            allTodos.Add(new TodoItemViewModel
+            {
+                Id = todo.Id,
+                Title = todo.Title,
+                Status = todo.Status,
+                ProjectName = todo.ProjectName ?? "Project未設定",
+                TeamName = todo.TeamName ?? $"TeamId: {todo.TeamId}",
+                MemberNames = todo.Members.Count == 0
+                    ? "担当なし"
+                    : string.Join(", ", todo.Members.Select(m => m.MemberName))
+            });
+        }
+
+        ApplyTodoFilter();
+    }
+
+    private async Task LoadProjectsAsync()
+    {
+        var projects = await apiClient.GetProjectsAsync();
+
+        Projects.Clear();
+        foreach (var project in projects)
+        {
+            Projects.Add(project);
+        }
+    }
+
+    private async Task LoadTeamsAsync()
+    {
+        var teams = await apiClient.GetTeamsAsync();
+
+        Teams.Clear();
+        foreach (var team in teams)
+        {
+            Teams.Add(team);
+        }
+    }
+
+    private async Task LoadMembersAsync()
+    {
+        var members = await apiClient.GetMembersAsync();
+
+        Members.Clear();
+        foreach (var member in members)
+        {
+            Members.Add(member);
+        }
+    }
+
     [RelayCommand]
     private async Task AddTodoAsync()
     {
+        /*
+         入力チェックの失敗も画面に見せたい状態なので、Console.WriteLineだけにしない。
+         ユーザーが次に何を直せばいいか分かるよう、ErrorMessageへ入れる。
+        */
         if (string.IsNullOrWhiteSpace(NewTodoTitle))
         {
-            Console.WriteLine("タイトルを入力してください。");
+            ErrorMessage = "タイトルを入力してください。";
             return;
         }
 
         if (string.IsNullOrWhiteSpace(NewTodoTeamName))
         {
-            Console.WriteLine("Team名を入力してください。");
+            ErrorMessage = "Team名を入力してください。";
             return;
         }
 
@@ -304,15 +231,13 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (team is null)
         {
-            Console.WriteLine($"指定されたTeamが見つかりません: {NewTodoTeamName}");
+            ErrorMessage = $"指定されたTeamが見つかりません: {NewTodoTeamName}";
             return;
         }
 
-        var teamId = team.Id;
-        
         var memberIds = new List<int>();
 
-        if(!string.IsNullOrWhiteSpace(NewTodoMemberNames))
+        if (!string.IsNullOrWhiteSpace(NewTodoMemberNames))
         {
             var memberNames = NewTodoMemberNames.Split(',');
 
@@ -329,45 +254,55 @@ public partial class MainWindowViewModel : ViewModelBase
 
                 if (member is null)
                 {
-                    Console.WriteLine($"指定されたMemberが見つかりません: {memberName}");
+                    ErrorMessage = $"指定されたMemberが見つかりません: {memberName}";
                     return;
                 }
 
                 memberIds.Add(member.Id);
             }
         }
-        Console.WriteLine($"memberIds: {string.Join(", ", memberIds)}");
+
         var request = new CreateTodoRequest
         {
-            TeamId = teamId,
+            TeamId = team.Id,
             Title = NewTodoTitle,
             Status = "Todo",
             MemberIds = memberIds
         };
 
-        var response = await _httpClient.PostAsJsonAsync(
-            "http://localhost:5128/api/todos",
-            request
-        );
-
-        if(!response.IsSuccessStatusCode)
+        try
         {
-            var error = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"Todo追加に失敗しました: {response.StatusCode}");
-            Console.WriteLine($"StatusCode: {(int)response.StatusCode} {response.StatusCode}");
-            Console.WriteLine($"ErrorBody: {error}");
-            return;
-        }
-        NewTodoTitle = string.Empty;
-        NewTodoTeamName = string.Empty;
-        NewTodoMemberNames = string.Empty;
+            /*
+             成功する可能性のある操作を始めるタイミングで、古いエラーを消す。
+             ただし、失敗したらcatchで新しいエラーを入れる。
+            */
+            ErrorMessage = null;
+            await apiClient.AddTodoAsync(request);
 
-        await LoadTodosAsync();
+            NewTodoTitle = string.Empty;
+            NewTodoTeamName = string.Empty;
+            NewTodoMemberNames = string.Empty;
+
+            /*
+             追加後はAPIから一覧を取り直す。
+             手元のリストに1件足すだけより、サーバー側で決まったIdや関連情報を正として画面に戻せる。
+            */
+            await LoadTodosAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Todoを追加できませんでした。API が起動しているか、入力内容が正しいか確認してください。";
+            Console.WriteLine($"Todo追加に失敗しました: {ex.Message}");
+        }
     }
 
     [RelayCommand]
     private void ShowTodoList()
     {
+        /*
+         画面切り替えはCurrentViewを差し替えるだけにしている。
+         DataContextを同じViewModelにすることで、一覧画面と管理画面が同じ状態を共有できる。
+        */
         CurrentView = new TodoListView
         {
             DataContext = this
@@ -386,9 +321,9 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task AddProjectAsync()
     {
-        if(string.IsNullOrWhiteSpace(NewProjectName))
+        if (string.IsNullOrWhiteSpace(NewProjectName))
         {
-            Console.WriteLine("Project名を入力してください");
+            ErrorMessage = "Project名を入力してください。";
             return;
         }
 
@@ -397,22 +332,19 @@ public partial class MainWindowViewModel : ViewModelBase
             Name = NewProjectName
         };
 
-        var response = await _httpClient.PostAsJsonAsync(
-            "http://localhost:5128/api/Projects",
-            request
-        );
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            var error = await response.Content.ReadAsStringAsync();
-            Console.WriteLine("Project追加に失敗しました");
-            Console.WriteLine($"StatusCode: {(int)response.StatusCode} {response.StatusCode}");
-            Console.WriteLine($"ErrorBody: {error}");
-            return;
-        }
+            ErrorMessage = null;
+            await apiClient.AddProjectAsync(request);
 
-        NewProjectName = string.Empty;
-        await LoadProjectsAsync();
-        Console.WriteLine("Projectを追加しました");
+            NewProjectName = string.Empty;
+            await LoadProjectsAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Projectを追加できませんでした。API が起動しているか、入力内容が正しいか確認してください。";
+            Console.WriteLine($"Project追加に失敗しました: {ex.Message}");
+        }
     }
 
     [RelayCommand]
@@ -420,13 +352,13 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(NewTeamProjectName))
         {
-            Console.WriteLine("Project名を入力してください。");
+            ErrorMessage = "Project名を入力してください。";
             return;
         }
 
         if (string.IsNullOrWhiteSpace(NewTeamName))
         {
-            Console.WriteLine("Team名を入力してください。");
+            ErrorMessage = "Team名を入力してください。";
             return;
         }
 
@@ -434,7 +366,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (project is null)
         {
-            Console.WriteLine($"指定されたProjectが見つかりません: {NewTeamProjectName}");
+            ErrorMessage = $"指定されたProjectが見つかりません: {NewTeamProjectName}";
             return;
         }
 
@@ -444,24 +376,20 @@ public partial class MainWindowViewModel : ViewModelBase
             Name = NewTeamName
         };
 
-        var response = await _httpClient.PostAsJsonAsync(
-            "http://localhost:5128/api/teams",
-            request
-        );
-
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            var error = await response.Content.ReadAsStringAsync();
-            Console.WriteLine("Team追加に失敗しました");
-            Console.WriteLine($"StatusCode: {(int)response.StatusCode} {response.StatusCode}");
-            Console.WriteLine($"ErrorBody: {error}");
-            return;
-        }
+            ErrorMessage = null;
+            await apiClient.AddTeamAsync(request);
 
-        NewTeamProjectName = string.Empty;
-        NewTeamName = string.Empty;
-        LoadTeamsAsync();
-        Console.WriteLine("Teamを追加しました");
+            NewTeamProjectName = string.Empty;
+            NewTeamName = string.Empty;
+            await LoadTeamsAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Teamを追加できませんでした。API が起動しているか、入力内容が正しいか確認してください。";
+            Console.WriteLine($"Team追加に失敗しました: {ex.Message}");
+        }
     }
 
     [RelayCommand]
@@ -469,7 +397,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(NewMemberName))
         {
-            Console.WriteLine("Member名を入力してください。");
+            ErrorMessage = "Member名を入力してください。";
             return;
         }
 
@@ -478,42 +406,35 @@ public partial class MainWindowViewModel : ViewModelBase
             Name = NewMemberName
         };
 
-        var response = await _httpClient.PostAsJsonAsync(
-            "http://localhost:5128/api/members",
-            request
-        );
-
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            var error = await response.Content.ReadAsStringAsync();
-            Console.WriteLine("Member追加に失敗しました");
-            Console.WriteLine($"StatusCode: {(int)response.StatusCode} {response.StatusCode}");
-            Console.WriteLine($"ErrorBody: {error}");
-            return;
-        }
+            ErrorMessage = null;
+            await apiClient.AddMemberAsync(request);
 
-        NewMemberName = string.Empty;
-        await LoadMembersAsync();
-        Console.WriteLine("Memberを追加しました");
+            NewMemberName = string.Empty;
+            await LoadMembersAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Memberを追加できませんでした。API が起動しているか、入力内容が正しいか確認してください。";
+            Console.WriteLine($"Member追加に失敗しました: {ex.Message}");
+        }
     }
 
     [RelayCommand]
     private async Task DeleteTodoAsync(int todoId)
     {
-        var response = await _httpClient.DeleteAsync(
-            $"http://localhost:5128/api/todos/{todoId}"
-        );
-
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            var error = await response.Content.ReadAsStringAsync();
-            Console.WriteLine("Todo削除に失敗しました");
-            Console.WriteLine($"StatusCode: {(int)response.StatusCode} {response.StatusCode}");
-            Console.WriteLine($"ErrorBody: {error}");
-            return;
+            ErrorMessage = null;
+            await apiClient.DeleteTodoAsync(todoId);
+            await LoadTodosAsync();
         }
-
-        await LoadTodosAsync();
+        catch (Exception ex)
+        {
+            ErrorMessage = "Todoを削除できませんでした。API が起動しているか確認してください。";
+            Console.WriteLine($"Todo削除に失敗しました: {ex.Message}");
+        }
     }
 
     [RelayCommand]
@@ -524,37 +445,37 @@ public partial class MainWindowViewModel : ViewModelBase
             Status = "Done"
         };
 
-        var response = await _httpClient.PutAsJsonAsync(
-            $"http://localhost:5128/api/todos/{todoId}/status",
-            request
-        );
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            var error = await response.Content.ReadAsStringAsync();
-            Console.WriteLine("Status更新に失敗しました");
-            Console.WriteLine($"StatusCode: {(int)response.StatusCode} {response.StatusCode}");
-            Console.WriteLine($"ErrorBody: {error}");
-            return;
+            ErrorMessage = null;
+            await apiClient.UpdateTodoStatusAsync(todoId, request);
+            await LoadTodosAsync();
         }
-
-        await LoadTodosAsync();
+        catch (Exception ex)
+        {
+            ErrorMessage = "Todoのステータスを更新できませんでした。API が起動しているか確認してください。";
+            Console.WriteLine($"Status更新に失敗しました: {ex.Message}");
+        }
     }
 
-    // 絞り込み処理
     private void ApplyTodoFilter()
     {
+        /*
+         絞り込みは表示用のTodosだけを作り直す。
+         allTodosを直接削らないことで、クリアしたときに元の一覧へ戻せる。
+        */
         var filteredTodos = allTodos.AsEnumerable();
 
-        if(!string.IsNullOrWhiteSpace(FilterProjectName))
+        if (!string.IsNullOrWhiteSpace(FilterProjectName))
         {
             filteredTodos = filteredTodos.Where(todo =>
-            todo.ProjectName.Contains(FilterProjectName,StringComparison.OrdinalIgnoreCase));
+                todo.ProjectName.Contains(FilterProjectName, StringComparison.OrdinalIgnoreCase));
         }
 
-        if(!string.IsNullOrWhiteSpace(FilterTeamName))
+        if (!string.IsNullOrWhiteSpace(FilterTeamName))
         {
             filteredTodos = filteredTodos.Where(todo =>
-            todo.TeamName.Contains(FilterTeamName,StringComparison.OrdinalIgnoreCase));
+                todo.TeamName.Contains(FilterTeamName, StringComparison.OrdinalIgnoreCase));
         }
 
         Todos.Clear();
@@ -563,6 +484,8 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             Todos.Add(todo);
         }
+
+        NotifyTodoListStateChanged();
     }
 
     [RelayCommand]
@@ -580,4 +503,14 @@ public partial class MainWindowViewModel : ViewModelBase
         ApplyTodoFilter();
     }
 
-}    
+    private void NotifyTodoListStateChanged()
+    {
+        /*
+         Todos.Countを元にした表示状態は、Todosの中身が変わっただけでは自動通知されない。
+         そのため、一覧を作り直した後に関連する状態を明示的に通知している。
+        */
+        OnPropertyChanged(nameof(ShowEmptyState));
+        OnPropertyChanged(nameof(ShowErrorState));
+        OnPropertyChanged(nameof(IsTodoListVisible));
+    }
+}

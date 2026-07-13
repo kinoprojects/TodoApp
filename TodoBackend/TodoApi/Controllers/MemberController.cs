@@ -1,7 +1,7 @@
-using System.ComponentModel;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TodoApi.Data;
+using TodoApi.Dtos;
 using TodoApi.Models;
 
 namespace TodoApi.Controllers;
@@ -67,17 +67,34 @@ public class MembersController: ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<Member>> CreateMember(Member member)
+    public async Task<ActionResult<MemberResponse>> CreateMember(CreateMemberRequest request)
     {
-        member.Id = 0;
+        var name = request.Name.Trim();
 
-        member.CreatedAt = DateTime.UtcNow;
-        member.UpdatedAt = DateTime.UtcNow;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return BadRequest("Name is required.");
+        }
+
+        var member = new Member
+        {
+            Name = name,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
 
         _context.Members.Add(member);
 
         await _context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetMember), new { id = member.Id }, member);
+        var response = new MemberResponse
+        {
+            Id = member.Id,
+            Name = member.Name,
+            CreatedAt = member.CreatedAt,
+            UpdatedAt = member.UpdatedAt
+        };
+
+        return CreatedAtAction(nameof(GetMember), new { id = member.Id }, response);
     }
 }

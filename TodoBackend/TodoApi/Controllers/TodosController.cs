@@ -68,7 +68,7 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
             .Include(t => t.MemberTodoItems)
             .ThenInclude(tm => tm.Member)
             .Include(t => t.Team)
-            .ThenInclude(team => team.Project)
+            .ThenInclude(team => team!.Project)
             .OrderBy(t => t.Team!.Project!.Name)
             .ThenBy(t => t.Team!.Name)
             .ThenBy( t => t.CreatedAt)
@@ -132,14 +132,32 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
      入力フォームから新しいTodoを追加するときなどに使う。
      */
     [HttpPost]
-    public async Task<ActionResult> CreateTodo(CreateTodoRequest request)
+    public async Task<ActionResult<TodoResponse>> CreateTodo(CreateTodoRequest request)
     {
+        var title = request.Title.Trim();
+
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return BadRequest("Title is required.");
+        }
+
+        var duplicateMemberIds = request.MemberIds
+            .GroupBy(memberId => memberId)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToList();
+
+        if (duplicateMemberIds.Count > 0)
+        {
+            return BadRequest($"MemberIds contains duplicates: {string.Join(", ", duplicateMemberIds)}.");
+        }
+
         // 送られてきた TeamId の Team が本当に存在するか確認
         var teamExists = await _context.Teams.AnyAsync(t => t.Id == request.TeamId);
 
         if(!teamExists)
         {
-            return NotFound("指定されたTeamが存在しません。");
+            return BadRequest($"TeamId {request.TeamId} does not exist.");
         }
 
         
@@ -153,7 +171,7 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
 
         if (missingMemberIds.Count > 0)
         {
-            return NotFound($"存在しないMemberIdがあります: {string.Join(", ", missingMemberIds)}");
+            return BadRequest($"MemberIds do not exist: {string.Join(", ", missingMemberIds)}.");
         }
 
         
@@ -161,8 +179,10 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
         var todoItem = new TodoItem
         {
             TeamId = request.TeamId,
-            Title = request.Title,
-            Status = request.Status
+            Title = title,
+            Status = request.Status,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
 
         // DBに保存している
@@ -182,17 +202,19 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
         }
         await _context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetTodo), new { id = todoItem.Id }, new
+        var response = new TodoResponse
         {
-            todoItem.Id,
-            todoItem.TeamId,
-            todoItem.Title,
+            Id = todoItem.Id,
+            TeamId = todoItem.TeamId,
+            Title = todoItem.Title,
             Status = todoItem.Status.ToString(),
-            todoItem.CreatedAt,
-            todoItem.UpdatedAt,
-            MemberIds = request.MemberIds.Distinct()
+            CreatedAt = todoItem.CreatedAt,
+            UpdatedAt = todoItem.UpdatedAt,
+            MemberIds = request.MemberIds.Distinct().ToList()
 
-        });
+        };
+
+        return CreatedAtAction(nameof(GetTodo), new { id = todoItem.Id }, response);
     }
 
     /*
@@ -202,7 +224,7 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
      タイトルを変更したり、完了状態を切り替えたりするときに使う。
      */
     [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateTodo(int id, TodoItem updatedTodo)
+    public async Task<IActionResult> UpdateTodo(int id, UpdateTodoRequest request)
     {
         // まず、更新したいTodoが本当に存在するかを探す。
         var todo = await _context.TodoItems.FindAsync(id);
@@ -218,9 +240,9 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
          IdやCreatedAtはここでは変更しない。
          「どの値をユーザーに変更させるか」を意識すると、安全なAPIを作りやすい。
          */
-        todo.Title = updatedTodo.Title;
+        todo.Title = request.Title.Trim();
 
-        todo.Status = updatedTodo.Status;
+        todo.Status = request.Status;
 
         todo.UpdatedAt = DateTime.UtcNow;
 
@@ -279,9 +301,22 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
         var todoExists = await _context.TodoItems.AnyAsync(t => t.Id == todoId);
         var memberExists = await _context.Members.AnyAsync(m => m.Id == memberId);
 
-        if (!todoExists || !memberExists)
+        if (!todoExists)
         {
-            return NotFound();
+            return BadRequest($"TodoId {todoId} does not exist.");
+        }
+
+        if (!memberExists)
+        {
+            return BadRequest($"MemberId {memberId} does not exist.");
+        }
+
+        var memberTodoItemExists = await _context.MemberTodoItems
+            .AnyAsync(mt => mt.TodoItemId == todoId && mt.MemberId == memberId);
+
+        if (memberTodoItemExists)
+        {
+            return Conflict($"MemberId {memberId} is already assigned to TodoId {todoId}.");
         }
 
         var memberTodoItem = new MemberTodoItem
@@ -294,6 +329,11 @@ public class TodosController : ControllerBase // ControllerBaseは、WebAPIで�
 
         await _context.SaveChangesAsync();
 
-        return Ok(memberTodoItem);
+        return Ok(new
+        {
+            memberTodoItem.Id,
+            memberTodoItem.TodoItemId,
+            memberTodoItem.MemberId
+        });
     }
 }

@@ -1,6 +1,8 @@
 using TodoApi.Models;
 
-public class UpdateTodoStatusRequest
+namespace TodoApi.Dtos;
+
+public sealed class UpdateTodoStatusRequest
 {
     public TodoStatus Status { get; set; }
 }
